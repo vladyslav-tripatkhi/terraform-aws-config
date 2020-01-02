@@ -1,50 +1,84 @@
-resource "aws_iam_account_password_policy" "this" {
-    count = var.password_policy_create ? 1 : 0
-    
-    minimum_password_length = var.password_minimum_length
-    max_password_age = var.password_max_age
-    password_reuse_prevention = var.password_reuse_prevention
-    require_numbers = var.password_require_numbers
-    require_symbols = var.password_require_symbols
-    require_lowercase_characters = var.password_require_lowercase
-    require_uppercase_characters = var.password_require_uppercase
-    allow_users_to_change_password = var.allow_users_to_change_password
+resource aws_config_config_rule iam_password_policy_rule {
+  count = var.check_iam_password_policy ? 1 : 0
+
+  name        = "iam_password_policy"
+  description = "Checks that IAM password policy satisfies the supplied requirements"
+  input_parameters = jsonencode({
+    MaxPasswordAge             = tostring(var.password_max_age)
+    MinimumPasswordLength      = tostring(var.password_minimum_length)
+    PasswordReusePrevention    = tostring(var.password_reuse_prevention)
+    RequireSymbols             = tostring(var.password_require_symbols)
+    RequireNumbers             = tostring(var.password_require_numbers)
+    RequireUppercaseCharacters = tostring(var.password_require_uppercase)
+    RequireLowercaseCharacters = tostring(var.password_require_lowercase)
+  })
+
+  source {
+    owner             = "AWS"
+    source_identifier = "IAM_PASSWORD_POLICY"
+  }
+
+  depends_on = [aws_config_delivery_channel.this]
 }
 
-data "template_file" "iam_password_policy" {
-    template = file("${path.module}/templates/iam_password_policy.tpl")
-    vars = {
-        password_minimum_length = var.password_minimum_length
-        password_max_age = var.password_max_age
-        password_reuse_prevention = var.password_reuse_prevention
-        password_require_numbers = var.password_require_numbers
-        password_require_symbols = var.password_require_symbols
-        password_require_lowercase = var.password_require_lowercase
-        password_require_uppercase = var.password_require_uppercase
-    }
+resource aws_config_config_rule iam_user_mfa_enabled_rule {
+  count = var.check_iam_user_mfa_enabled ? 1 : 0
+
+  name        = "iam_user_mfa_enabled"
+  description = "Checks whether MFA is enabled for every IAM user in your AWS account"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "IAM_USER_MFA_ENABLED"
+  }
+
+  depends_on = [aws_config_delivery_channel.this]
 }
 
-resource "aws_config_config_rule" "iam_password_policy_rule" {
-    name = "iam_password_policy"
-    description = ""
-    input_parameters = data.template_file.iam_password_policy.rendered
+resource aws_config_config_rule iam_user_unused_credentials_check {
+  count = var.check_iam_user_unused_credentials ? 1 : 0
 
-    source {
-        owner = "AWS"
-        source_identifier = "IAM_PASSWORD_POLICY"
-    }
+  name        = "iam-user-unused-credentials-check"
+  description = "Checks whether your AWS IAM users have credentials that have not been used within the specified number of days you provided"
 
-    depends_on = [aws_config_delivery_channel.this]
+  source {
+    owner             = "AWS"
+    source_identifier = "IAM_USER_UNUSED_CREDENTIALS_CHECK"
+  }
+
+  input_parameters = jsonencode({
+    maxCredentialUsageAge = tostring(var.max_credential_usage_age)
+  })
+  depends_on = [aws_config_delivery_channel.this]
 }
 
-resource "aws_config_config_rule" "iam_user_mfa_enabled_rule" {
-    name = "iam_user_mfa_enabled"
-    description = ""
-    
-    source {
-        owner = "AWS"
-        source_identifier = "IAM_USER_MFA_ENABLED"
-    }
+resource "aws_config_config_rule" "access-keys-rotated" {
+  count = var.check_access_keys_rotated ? 1 : 0
 
-    depends_on = [aws_config_delivery_channel.this]
+  name        = "access-keys-rotated"
+  description = "Checks whether the active access keys are rotated within the number of days specified in maxAccessKeyAge"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "ACCESS_KEYS_ROTATED"
+  }
+
+  input_parameters = jsonencode({
+    maxAccessKeyAge = tostring(var.max_access_key_age)
+  })
+  depends_on = [aws_config_delivery_channel.this]
+}
+
+resource "aws_config_config_rule" "mfa-enabled-for-iam-console-access" {
+  count = var.check_mfa_enabled_for_iam_console_access ? 1 : 0
+
+  name        = "mfa-enabled-for-iam-console-access"
+  description = "Checks whether MFA is enabled for all IAM users that use a console password"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "MFA_ENABLED_FOR_IAM_CONSOLE_ACCESS"
+  }
+
+  depends_on = [aws_config_delivery_channel.this]
 }
